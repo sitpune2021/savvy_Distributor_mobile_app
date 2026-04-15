@@ -84,38 +84,45 @@ class ApiService {
       return result;
     } catch (e) {
       AppLogger.e("❌ API ERROR: $e");
-      throw Exception("API Error: $e");
+      rethrow;
     }
   }
 
   // 🔥 RESPONSE HANDLER
   dynamic _handleResponse(http.Response response) {
-    try {
-      final data = jsonDecode(response.body);
+    final data = jsonDecode(response.body);
 
-      switch (response.statusCode) {
-        case 200:
-        case 201:
-          return data;
+    switch (response.statusCode) {
+      case 200:
+      case 201:
+        return data;
 
-        case 400:
-          throw Exception(data["message"] ?? "Bad Request");
+      case 400:
+      case 401:
+      case 422:
+        // 🔥 Handle validation errors (multiple fields)
+        if (data["errors"] != null) {
+          final errors = data["errors"] as Map<String, dynamic>;
 
-        case 401:
-          throw Exception("Unauthorized");
+          final messages = errors.values
+              .expand((e) => e as List)
+              .map((e) => "• $e")
+              .join("\n"); // ✅ combine all errors
 
-        case 404:
-          throw Exception("API Not Found");
+          throw messages;
+        }
 
-        case 500:
-          throw Exception("Server Error");
+        // fallback message
+        throw data["message"] ?? "Something went wrong";
 
-        default:
-          throw Exception("Error (${response.statusCode})");
-      }
-    } catch (e) {
-      AppLogger.e("Parsing Error: $e");
-      throw Exception("Response parsing error");
+      case 404:
+        throw "API Not Found";
+
+      case 500:
+        throw "Server error. Try again later";
+
+      default:
+        throw "Error (${response.statusCode})";
     }
   }
 }

@@ -3,9 +3,9 @@ import 'package:distributor/services/auth_service.dart';
 import 'package:distributor/utils/colors.dart';
 import 'package:flutter/material.dart';
 
-void showLogoutDialog(BuildContext context) {
+void showLogoutDialog(BuildContext parentContext) {
   showGeneralDialog(
-    context: context,
+    context: parentContext,
     barrierDismissible: true,
     barrierLabel: "Logout",
     barrierColor: Colors.black.withValues(alpha: 0.4),
@@ -20,7 +20,7 @@ void showLogoutDialog(BuildContext context) {
         scale: Curves.easeInOut.transform(animation.value),
         child: Opacity(
           opacity: animation.value,
-          child: const _LogoutDialogUI(),
+          child: _LogoutDialogUI(parentContext: parentContext),
         ),
       );
     },
@@ -28,7 +28,9 @@ void showLogoutDialog(BuildContext context) {
 }
 
 class _LogoutDialogUI extends StatelessWidget {
-  const _LogoutDialogUI();
+  final BuildContext parentContext;
+
+  const _LogoutDialogUI({required this.parentContext});
 
   @override
   Widget build(BuildContext context) {
@@ -110,17 +112,22 @@ class _LogoutDialogUI extends StatelessWidget {
                   Expanded(
                     child: ElevatedButton(
                       onPressed: () async {
-                        Navigator.pop(context);
+                        final navigator = Navigator.of(
+                          context,
+                          rootNavigator: true,
+                        );
+
+                        Navigator.pop(context); // close dialog
+
                         final authService = AuthService();
                         await authService.logout();
-                        if (context.mounted) {
-                          Navigator.pushNamedAndRemoveUntil(
-                            context,
-                            AppRoutes.login,
-                            (route) => false,
-                          );
-                        }
+
+                        navigator.pushNamedAndRemoveUntil(
+                          AppRoutes.login,
+                          (route) => false,
+                        );
                       },
+
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
                         shape: RoundedRectangleBorder(
@@ -130,7 +137,7 @@ class _LogoutDialogUI extends StatelessWidget {
                       child: const Text(
                         "Logout",
                         style: TextStyle(
-                          color: Colors.white, // ✅ FIXED
+                          color: Colors.white,
                           fontWeight: FontWeight.bold,
                         ),
                       ),

@@ -22,13 +22,22 @@ class _LoginScreenState extends State<LoginScreen> {
   final authService = AuthService();
 
   Future<void> login() async {
+    if (isLoading) return;
+
     final email = emailController.text.trim();
     final password = passwordController.text.trim();
 
-    if (email.isEmpty || password.isEmpty) {
+    if (email.isEmpty) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text("Enter email & password")));
+      ).showSnackBar(const SnackBar(content: Text("Please enter email")));
+      return;
+    }
+
+    if (password.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Please enter password")));
       return;
     }
 
@@ -48,9 +57,12 @@ class _LoginScreenState extends State<LoginScreen> {
         (route) => false,
       );
     } catch (e) {
+      String message = e.toString();
+      message = message.replaceAll("Exception: ", "");
+
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(e.toString())));
+      ).showSnackBar(SnackBar(content: Text(message)));
     } finally {
       setState(() => isLoading = false);
     }
@@ -137,6 +149,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                             // EMAIL FIELD
                             TextField(
+                              cursorColor: AppColors.primary,
                               controller: emailController,
                               decoration: InputDecoration(
                                 hintText: "name@email.com",
@@ -172,6 +185,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                             // PASSWORD FIELD
                             TextField(
+                              cursorColor: AppColors.primary,
                               controller: passwordController,
                               obscureText: obscureText,
                               decoration: InputDecoration(
