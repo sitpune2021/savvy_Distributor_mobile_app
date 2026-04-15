@@ -10,10 +10,12 @@ class AuthService {
     await prefs.clear(); // ✅ clear all session
 
     // 🔥 Navigate to login & remove all screens
-    Navigator.pushNamedAndRemoveUntil(
-      context,
-      AppRoutes.login,
-      (route) => false,
-    );
+    if (context.mounted) {
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        AppRoutes.login,
+        (route) => false,
+      );
+    }
   }
 }

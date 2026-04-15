@@ -116,7 +116,7 @@ void showLogoutDialog(BuildContext context) {
     context: context,
     barrierDismissible: true,
     barrierLabel: "Logout",
-    barrierColor: Colors.black.withOpacity(0.4),
+    barrierColor: Colors.black.withValues(alpha: 0.4),
     transitionDuration: const Duration(milliseconds: 300),
 
     pageBuilder: (context, animation, secondaryAnimation) {
@@ -160,7 +160,7 @@ class _LogoutDialogUI extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(15),
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.1),
+                  color: AppColors.primary.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
