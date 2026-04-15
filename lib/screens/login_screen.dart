@@ -1,6 +1,7 @@
 // ignore_for_file: deprecated_member_use
 
 import 'package:distributor/router/app_routes.dart';
+import 'package:distributor/services/auth_service.dart';
 import 'package:distributor/utils/colors.dart';
 import 'package:flutter/material.dart';
 
@@ -16,9 +17,51 @@ class _LoginScreenState extends State<LoginScreen> {
   final passwordController = TextEditingController();
 
   bool obscureText = true;
+  bool isLoading = false;
 
-  // 🔵 Main Blue Color
-  // final Color primaryBlue = const Color(0xFF2563EB);
+  final authService = AuthService();
+
+  Future<void> login() async {
+    final email = emailController.text.trim();
+    final password = passwordController.text.trim();
+
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Enter email & password")));
+      return;
+    }
+
+    setState(() => isLoading = true);
+
+    try {
+      final result = await authService.login(email, password);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(result.message)));
+
+      // ✅ Clear stack & go to dashboard
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        AppRoutes.dashboard,
+        (route) => false,
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
+    } finally {
+      setState(() => isLoading = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    emailController.dispose();
+    passwordController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -64,18 +107,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         child: Column(
                           children: [
-                            // const SizedBox(height: 20),
-
-                            // const Text(
-                            //   "Distributor App",
-                            //   style: TextStyle(
-                            //     fontSize: 16,
-                            //     letterSpacing: 1.5,
-                            //     color: Colors.white70,
-                            //   ),
-                            // ),
-
-                            // const SizedBox(height: 10),
                             Text(
                               "Welcome Back 👋",
                               style: TextStyle(
@@ -219,30 +250,30 @@ class _LoginScreenState extends State<LoginScreen> {
                                     borderRadius: BorderRadius.circular(14),
                                   ),
                                 ),
-                                onPressed: () {
-                                  Navigator.pushNamed(
-                                    context,
-                                    AppRoutes.dashboard,
-                                  );
-                                },
-                                child: const Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      "Sign In",
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
+                                onPressed: isLoading ? null : login,
+                                child: isLoading
+                                    ? const CircularProgressIndicator(
                                         color: Colors.white,
+                                      )
+                                    : const Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Text(
+                                            "Sign In",
+                                            style: TextStyle(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                          SizedBox(width: 10),
+                                          Icon(
+                                            Icons.arrow_forward,
+                                            color: Colors.white,
+                                          ),
+                                        ],
                                       ),
-                                    ),
-                                    SizedBox(width: 10),
-                                    Icon(
-                                      Icons.arrow_forward,
-                                      color: Colors.white,
-                                    ),
-                                  ],
-                                ),
                               ),
                             ),
                           ],
