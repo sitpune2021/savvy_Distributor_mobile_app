@@ -1,3 +1,4 @@
+import 'package:distributor/services/auth_service.dart';
 import 'package:distributor/utils/colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -14,6 +15,53 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   final passwordController = TextEditingController();
 
   bool obscureText = true;
+  bool isLoading = false;
+
+  final authService = AuthService();
+
+  Future<void> handleReset() async {
+    if (isLoading) return;
+
+    final email = emailController.text.trim();
+    final password = passwordController.text.trim();
+
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Enter email")));
+      return;
+    }
+
+    if (password.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Enter password")));
+      return;
+    }
+
+    setState(() => isLoading = true);
+
+    try {
+      final result = await authService.resetPassword(email, password);
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(result["message"])));
+
+      // ✅ Navigate to login
+      Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+    } catch (e) {
+      String message = e.toString().replaceAll("Exception: ", "");
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    } finally {
+      setState(() => isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -30,174 +78,217 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           statusBarBrightness: Brightness.light,
         ),
 
-        leading: IconButton(
-          icon: const Icon(
-            Icons.arrow_back_ios_new,
-            size: 20,
-            color: Colors.black,
+        leading: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.blue.shade50, // light blue background
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.1),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: IconButton(
+              icon: const Icon(
+                Icons.arrow_back_ios_new,
+                size: 18,
+                color: Colors.black,
+              ),
+              onPressed: () => Navigator.pop(context),
+            ),
           ),
-          onPressed: () => Navigator.pop(context),
         ),
       ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          double width = constraints.maxWidth;
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage("assets/images/background.png"),
+            fit: BoxFit.cover,
+          ),
+        ),
+        child: Container(
+          color: Colors.black.withValues(alpha: .0),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              double width = constraints.maxWidth;
 
-          bool isMobile = width < 600;
-          bool isTablet = width < 1024;
+              bool isMobile = width < 600;
+              bool isTablet = width < 1024;
 
-          double containerWidth = isMobile
-              ? double.infinity
-              : (isTablet ? 500 : 420);
+              double containerWidth = isMobile
+                  ? double.infinity
+                  : (isTablet ? 500 : 420);
 
-          double padding = isMobile ? 16 : 24;
-          double titleSize = isMobile ? 26 : 32;
+              double padding = isMobile ? 16 : 24;
+              double titleSize = isMobile ? 26 : 32;
 
-          return SafeArea(
-            child: Center(
-              child: SingleChildScrollView(
-                child: SizedBox(
-                  width: containerWidth,
-                  child: Column(
-                    children: [
-                      // 🔥 HEADER
-                      Container(
-                        width: double.infinity,
-                        padding: EdgeInsets.all(padding),
-                        decoration: const BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [Color(0xFF2563EB), Color(0xFF60A5FA)],
-                          ),
-                        ),
-                        child: Column(
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [],
+              return SafeArea(
+                child: Center(
+                  child: SingleChildScrollView(
+                    child: SizedBox(
+                      width: containerWidth,
+                      child: Column(
+                        children: [
+                          // 🔥 HEADER
+                          Container(
+                            width: double.infinity,
+                            padding: EdgeInsets.all(padding),
+                            decoration: const BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [Color(0xFF2563EB), Color(0xFF60A5FA)],
+                              ),
+                              borderRadius: BorderRadius.vertical(
+                                top: Radius.circular(16),
+                              ),
                             ),
-                            Container(
-                              padding: const EdgeInsets.all(16),
+                            child: Column(
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [],
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: .2),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Icon(
+                                    Icons.lock_reset,
+                                    color: Colors.white,
+                                  ),
+                                ),
+
+                                const SizedBox(height: 10),
+
+                                Text(
+                                  "Update credentials",
+                                  style: TextStyle(
+                                    fontSize: titleSize,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+
+                                const SizedBox(height: 8),
+
+                                const Text(
+                                  "Reset your password securely",
+                                  style: TextStyle(color: Colors.white70),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // 🔳 FORM
+                          Padding(
+                            padding: EdgeInsets.all(padding),
+                            child: Container(
+                              padding: const EdgeInsets.all(20),
                               decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: .2),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(
-                                Icons.lock_reset,
                                 color: Colors.white,
+                                borderRadius: BorderRadius.circular(16),
                               ),
-                            ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text("EMAIL ADDRESS"),
+                                  const SizedBox(height: 8),
 
-                            const SizedBox(height: 10),
-
-                            Text(
-                              "Update credentials",
-                              style: TextStyle(
-                                fontSize: titleSize,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-
-                            const SizedBox(height: 8),
-
-                            const Text(
-                              "Reset your password securely",
-                              style: TextStyle(color: Colors.white70),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      // 🔳 FORM
-                      Padding(
-                        padding: EdgeInsets.all(padding),
-                        child: Container(
-                          padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text("EMAIL ADDRESS"),
-                              const SizedBox(height: 8),
-
-                              TextField(
-                                controller: emailController,
-                                decoration: InputDecoration(
-                                  hintText: "name@company.com",
-                                  filled: true,
-                                  fillColor: const Color(0xFFF1F5F9),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: BorderSide.none,
-                                  ),
-                                ),
-                              ),
-
-                              const SizedBox(height: 20),
-
-                              const Text("NEW PASSWORD"),
-                              const SizedBox(height: 8),
-
-                              TextField(
-                                controller: passwordController,
-                                obscureText: obscureText,
-                                decoration: InputDecoration(
-                                  hintText: "••••••••",
-                                  filled: true,
-                                  fillColor: const Color(0xFFF1F5F9),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: BorderSide.none,
-                                  ),
-                                  suffixIcon: IconButton(
-                                    icon: Icon(
-                                      obscureText
-                                          ? Icons.visibility_off
-                                          : Icons.visibility,
-                                      color: AppColors.primary,
-                                    ),
-                                    onPressed: () {
-                                      setState(() {
-                                        obscureText = !obscureText;
-                                      });
-                                    },
-                                  ),
-                                ),
-                              ),
-
-                              const SizedBox(height: 20),
-
-                              SizedBox(
-                                width: double.infinity,
-                                height: 55,
-                                child: ElevatedButton(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppColors.primary,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
+                                  TextField(
+                                    cursorColor: AppColors.primary,
+                                    controller: emailController,
+                                    decoration: InputDecoration(
+                                      hintText: "name@company.com",
+                                      filled: true,
+                                      fillColor: const Color(0xFFF1F5F9),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: BorderSide.none,
+                                      ),
                                     ),
                                   ),
-                                  onPressed: () {},
-                                  child: const Text(
-                                    "Reset Password",
-                                    style: TextStyle(color: Colors.white),
+
+                                  const SizedBox(height: 20),
+
+                                  const Text("NEW PASSWORD"),
+                                  const SizedBox(height: 8),
+
+                                  TextField(
+                                    cursorColor: AppColors.primary,
+                                    controller: passwordController,
+                                    obscureText: obscureText,
+                                    decoration: InputDecoration(
+                                      hintText: "••••••••",
+                                      filled: true,
+                                      fillColor: const Color(0xFFF1F5F9),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: BorderSide.none,
+                                      ),
+                                      suffixIcon: IconButton(
+                                        icon: Icon(
+                                          obscureText
+                                              ? Icons.visibility_off
+                                              : Icons.visibility,
+                                          color: AppColors.primary,
+                                        ),
+                                        onPressed: () {
+                                          setState(() {
+                                            obscureText = !obscureText;
+                                          });
+                                        },
+                                      ),
+                                    ),
                                   ),
-                                ),
+
+                                  const SizedBox(height: 20),
+
+                                  SizedBox(
+                                    width: double.infinity,
+                                    height: 55,
+                                    child: ElevatedButton(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppColors.primary,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                        ),
+                                      ),
+                                      onPressed: isLoading ? null : handleReset,
+                                      child: isLoading
+                                          ? const CircularProgressIndicator(
+                                              color: Colors.white,
+                                            )
+                                          : const Text(
+                                              "Reset Password",
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ],
+                            ),
                           ),
-                        ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
-              ),
-            ),
-          );
-        },
+              );
+            },
+          ),
+        ),
       ),
     );
   }

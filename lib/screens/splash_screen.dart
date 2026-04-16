@@ -24,7 +24,7 @@ class _SplashScreenState extends State<SplashScreen>
 
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 2),
+      duration: const Duration(seconds: 5),
     );
 
     _slideAnimation = Tween<Offset>(
@@ -86,7 +86,7 @@ class _SplashScreenState extends State<SplashScreen>
               FadeTransition(
                 opacity: _fadeAnimation,
                 child: Lottie.asset(
-                  'assets/animation.json', // add your lottie file
+                  'assets/images/lottie-animation.json', // add your lottie file
                   height: 180,
                 ),
               ),
@@ -97,7 +97,7 @@ class _SplashScreenState extends State<SplashScreen>
               SlideTransition(
                 position: _slideAnimation,
                 child: const Text(
-                  'Distributor App',
+                  'Distributor',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 30,

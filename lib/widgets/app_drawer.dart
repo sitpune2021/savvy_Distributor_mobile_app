@@ -1,12 +1,36 @@
 import 'package:distributor/widgets/logout_alert.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/colors.dart';
 import '../router/app_routes.dart';
 
-class AppDrawer extends StatelessWidget {
+class AppDrawer extends StatefulWidget {
   final String currentRoute;
 
   const AppDrawer({super.key, required this.currentRoute});
+
+  @override
+  State<AppDrawer> createState() => _AppDrawerState();
+}
+
+class _AppDrawerState extends State<AppDrawer> {
+  String name = "";
+  String email = "";
+
+  @override
+  void initState() {
+    super.initState();
+    loadUser();
+  }
+
+  Future<void> loadUser() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    setState(() {
+      name = prefs.getString("name") ?? "";
+      email = prefs.getString("email") ?? "";
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -22,7 +46,7 @@ class AppDrawer extends StatelessWidget {
                 colors: [Color(0xFF2563EB), Color(0xFF60A5FA)],
               ),
             ),
-            child: const Column(
+            child: Column(
               children: [
                 CircleAvatar(
                   radius: 35,
@@ -31,12 +55,13 @@ class AppDrawer extends StatelessWidget {
                 ),
                 SizedBox(height: 10),
                 Text(
-                  "John Doe",
-                  style: TextStyle(color: Colors.white, fontSize: 18),
+                  name.isNotEmpty ? name : "User",
+                  style: const TextStyle(color: Colors.white, fontSize: 18),
                 ),
+
                 Text(
-                  "john@example.com",
-                  style: TextStyle(color: Colors.white70),
+                  email.isNotEmpty ? email : "",
+                  style: const TextStyle(color: Colors.white70),
                 ),
               ],
             ),
@@ -56,7 +81,7 @@ class AppDrawer extends StatelessWidget {
             context,
             icon: Icons.shopping_cart,
             title: "Orders",
-            route: "/orders",
+            route: AppRoutes.orderList,
           ),
 
           _buildItem(
@@ -99,7 +124,7 @@ class AppDrawer extends StatelessWidget {
     required String title,
     required String route,
   }) {
-    bool isSelected = currentRoute == route;
+    bool isSelected = widget.currentRoute == route;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -131,8 +156,8 @@ class AppDrawer extends StatelessWidget {
             return;
           }
 
-          if (currentRoute != route) {
-            Navigator.pushReplacementNamed(context, route);
+          if (widget.currentRoute != route) {
+            Navigator.pushNamed(context, route);
           }
         },
       ),

@@ -41,6 +41,11 @@ class AuthService {
         if (token.isNotEmpty) {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString("token", token);
+
+          // ✅ SAVE USER DATA
+          await prefs.setString("name", model.data?.distributor?.name ?? "");
+          await prefs.setString("email", model.data?.distributor?.email ?? "");
+
           AppLogger.i("💾 Token Saved");
         }
 
@@ -51,6 +56,38 @@ class AuthService {
       }
     } catch (e) {
       AppLogger.e("❌ LOGIN ERROR: $e");
+
+      String message = e.toString();
+
+      if (message.contains("SocketException")) {
+        message = "No internet connection";
+      }
+
+      throw message.replaceAll("Exception: ", "");
+    }
+  }
+
+  Future<dynamic> resetPassword(String email, String password) async {
+    AppLogger.i("🔁 RESET PASSWORD START");
+
+    try {
+      final response = await _api.request(
+        endpoint: ApiEndpoints.resetPassword,
+        method: "POST",
+        body: {"email": email, "password": password, "role": "distributor"},
+      );
+
+      AppLogger.d("Response: $response");
+
+      if (response["status"] == true) {
+        AppLogger.i("✅ Reset Success: ${response["message"]}");
+        return response;
+      } else {
+        AppLogger.w("❌ Reset Failed: ${response["message"]}");
+        throw response["message"]?.toString() ?? "Reset failed";
+      }
+    } catch (e) {
+      AppLogger.e("❌ RESET ERROR: $e");
 
       String message = e.toString();
 

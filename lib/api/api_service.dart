@@ -116,13 +116,13 @@ class ApiService {
         throw data["message"] ?? "Something went wrong";
 
       case 404:
-        throw "API Not Found";
+        throw data["message"] ?? "API Not Found";
 
       case 500:
-        throw "Server error. Try again later";
+        throw data["message"] ?? "Server error. Try again later";
 
       default:
-        throw "Error (${response.statusCode})";
+        throw data["message"] ?? "Error (${response.statusCode})";
     }
   }
 }
