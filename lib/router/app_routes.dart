@@ -1,6 +1,7 @@
 import 'package:distributor/screens/home_screen.dart';
 import 'package:distributor/screens/order_list_screen.dart';
 import 'package:distributor/screens/order_request_screen.dart';
+import 'package:distributor/screens/order_screen.dart';
 import 'package:distributor/screens/splash_screen.dart';
 import 'package:flutter/material.dart';
 import '../screens/login_screen.dart';
@@ -13,6 +14,7 @@ class AppRoutes {
   static const String resetPassword = '/reset-password';
   static const String orderRequest = '/order-request';
   static const String orderList = 'order-list';
+  static const String ordersList = 'orders-list';
 
   static Route<dynamic> generateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -37,6 +39,9 @@ class AppRoutes {
         return MaterialPageRoute(
           builder: (_) => OrderListScreen(initialTab: initialTab),
         );
+
+      case ordersList:
+        return MaterialPageRoute(builder: (_) => OrdersListScreen());
 
       default:
         return MaterialPageRoute(

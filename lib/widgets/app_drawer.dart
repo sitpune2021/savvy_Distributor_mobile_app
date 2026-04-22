@@ -35,17 +35,14 @@ class _AppDrawerState extends State<AppDrawer> {
   @override
   Widget build(BuildContext context) {
     return Drawer(
+      backgroundColor: Colors.white,
       child: Column(
         children: [
           // 🔵 MODERN HEADER
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 40),
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFF2563EB), Color(0xFF60A5FA)],
-              ),
-            ),
+            decoration: const BoxDecoration(color: AppColors.primary),
             child: Column(
               children: [
                 CircleAvatar(
@@ -81,7 +78,7 @@ class _AppDrawerState extends State<AppDrawer> {
             context,
             icon: Icons.shopping_cart,
             title: "Orders",
-            route: AppRoutes.orderList,
+            route: AppRoutes.ordersList,
           ),
 
           _buildItem(

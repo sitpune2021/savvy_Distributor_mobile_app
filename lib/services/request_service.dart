@@ -1,5 +1,6 @@
 import 'package:distributor/api/api_service.dart';
 import 'package:distributor/models/order_list_model.dart';
+import 'package:distributor/models/order_summary_model.dart';
 import 'package:distributor/models/plant_model.dart';
 import 'package:distributor/models/varient_model.dart';
 import 'package:distributor/utils/app_logger.dart';
@@ -7,6 +8,38 @@ import 'package:distributor/api/api_endpoints.dart';
 
 class RequestService {
   final ApiService _api = ApiService();
+
+  ///
+  Future<OrderSummaryModel> getOrderSummary() async {
+    AppLogger.i("📊 FETCH ORDER SUMMARY START");
+
+    try {
+      final response = await _api.request(
+        endpoint: ApiEndpoints.orderSummary,
+        method: "GET",
+        isAuthRequired: true,
+      );
+
+      final model = OrderSummaryModel.fromJson(response);
+
+      AppLogger.d("Orders Total: ${model.orders.total}");
+      AppLogger.d("Plants Count: ${model.plantStock.plants.length}");
+
+      AppLogger.i("✅ Order Summary fetched");
+
+      return model;
+    } catch (e) {
+      AppLogger.e("❌ ORDER SUMMARY ERROR: $e");
+
+      String message = e.toString();
+
+      if (message.contains("SocketException")) {
+        message = "No internet connection";
+      }
+
+      throw message.replaceAll("Exception: ", "");
+    }
+  }
 
   /// 🌱 GET PLANTS
   Future<List<Plant>> getPlants() async {
