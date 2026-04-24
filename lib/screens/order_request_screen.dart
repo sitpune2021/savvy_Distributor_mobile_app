@@ -15,11 +15,18 @@ class OrderRequestScreen extends StatefulWidget {
 
 class _OrderRequestScreenState extends State<OrderRequestScreen> {
   bool isVariantEnabled = false;
-  bool keepAtPlant = false;
+  bool usePreviousStock = false; // ✅ checkbox for used_previous_stock
+  bool allowRemainingStock = false; // ✅ replaces keepAtPlant
   bool isSubmitting = false;
 
-  final TextEditingController filledJarsController = TextEditingController();
-  final TextEditingController unlabeledJarsController = TextEditingController();
+  // ✅ Controllers
+  final TextEditingController deliveredJarsController = TextEditingController();
+  final TextEditingController usedPreviousStockController =
+      TextEditingController();
+  final TextEditingController requiredLabeledController =
+      TextEditingController();
+  final TextEditingController requiredUnlabeledController =
+      TextEditingController();
 
   /// 🌱 PLANT DATA
   List<Plant> plants = [];
@@ -30,140 +37,113 @@ class _OrderRequestScreenState extends State<OrderRequestScreen> {
   List<VariantData> variants = [];
   List<VariantData> selectedVariants = [];
   Map<int, TextEditingController> variantControllers = {};
-  bool isLoadingVariants = false;
+  bool isLoadingVariants = true;
 
-  /// 📊 CALCULATED VALUES
-  int _remainingQuantity = 0;
-
-  // ============================================
   // ✅ HELPER METHODS
-  // ============================================
-
-  /// 🔢 GET TOTAL VARIANT QUANTITY
-  int getTotalVariantQty() {
+  /// Sum of all selected variant quantities
+  int _totalVariantQty() {
     int total = 0;
-
     for (var v in selectedVariants) {
-      final text = variantControllers[v.id]?.text ?? "0";
-      total += int.tryParse(text) ?? 0;
+      total += int.tryParse(variantControllers[v.id]?.text ?? "0") ?? 0;
     }
-
     return total;
   }
 
-  /// 🧮 CALCULATE REMAINING QUANTITY
-  int _calculateRemaining() {
-    int filled = int.tryParse(filledJarsController.text) ?? 0;
-    int unlabeled = int.tryParse(unlabeledJarsController.text) ?? 0;
+  int get _requiredLabeled => int.tryParse(requiredLabeledController.text) ?? 0;
 
-    int allocated = unlabeled;
+  int get _requiredUnlabeled =>
+      int.tryParse(requiredUnlabeledController.text) ?? 0;
 
-    if (isVariantEnabled) {
-      allocated += getTotalVariantQty();
-    }
+  int get _deliveredJars => int.tryParse(deliveredJarsController.text) ?? 0;
 
-    return filled - allocated;
-  }
+  int get _totalRequired => _requiredLabeled + _requiredUnlabeled;
 
-  /// ✅ DETERMINE IF "KEEP AT PLANT" SHOULD BE TRUE
-  /// Returns true if remaining quantity > 0 (not all allocated)
-  bool _shouldKeepAtPlant() {
-    return _calculateRemaining() > 0;
-  }
-
-  /// 🔴 VALIDATION LOGIC
-  /// Returns error message if validation fails, null if valid
+  /// ✅ VALIDATION
   String? _validateForm() {
-    // 1️⃣ PLANT REQUIRED
-    if (selectedPlant == null) {
-      return "Please select a plant";
+    // 1. Plant
+    if (selectedPlant == null) return "Please select a plant";
+
+    // 2. Delivered jars
+    if (_deliveredJars == 0) return "Enter delivered jars count";
+
+    // 3. used_previous_stock (optional, only if checkbox on)
+    if (usePreviousStock) {
+      int prev = int.tryParse(usedPreviousStockController.text) ?? 0;
+      if (prev == 0) return "Enter used previous stock count";
     }
 
-    // 2️⃣ FILLED JARS REQUIRED
-    int filled = int.tryParse(filledJarsController.text) ?? 0;
-    if (filled == 0) {
-      return "Enter filled jars quantity";
-    }
+    // 4. Required labeled jars
+    if (_requiredLabeled == 0) return "Enter required labeled jars count";
 
-    // 3️⃣ UNLABELED JARS REQUIRED
-    int unlabeled = int.tryParse(unlabeledJarsController.text) ?? 0;
-    if (unlabeled == 0) {
-      return "Enter unlabeled jars count";
-    }
+    // 5. At least one variant selected
+    if (selectedVariants.isEmpty) return "Select at least one variant";
 
-    // 4️⃣ VARIANT VALIDATION
-    if (isVariantEnabled) {
-      if (selectedVariants.isEmpty) {
-        return "Select at least one variant";
-      }
-
-      // Check if all selected variants have quantity > 0
-      for (var v in selectedVariants) {
-        int qty = int.tryParse(variantControllers[v.id]?.text ?? "0") ?? 0;
-        if (qty == 0) {
-          return "Enter quantity for all selected variants";
-        }
+    // 6. Each selected variant must have qty > 0
+    for (var v in selectedVariants) {
+      int qty = int.tryParse(variantControllers[v.id]?.text ?? "0") ?? 0;
+      if (qty == 0) {
+        return "Enter quantity for variant \"${v.variantName}\"";
       }
     }
 
-    // 5️⃣ QUANTITY MATCH VALIDATION
-    int remaining = _calculateRemaining();
-
-    if (remaining < 0) {
-      return "Total allocated (${filled - remaining}) exceeds filled jars ($filled)";
+    // 7. ✅ required_labeled_jars MUST equal sum of variant quantities
+    int variantTotal = _totalVariantQty();
+    if (variantTotal != _requiredLabeled) {
+      return "Variant total ($variantTotal) must match required labeled jars ($_requiredLabeled)";
     }
 
-    if (remaining > 0 && !keepAtPlant) {
-      return "Set 'Keep at Plant' for remaining $remaining jars";
+    // 8. Required unlabeled jars
+    if (_requiredUnlabeled == 0) return "Enter required unlabeled jars count";
+
+    // 9. ✅ allow_remaining_stock validation
+    if (allowRemainingStock) {
+      // delivered_jars must be >= required_labeled + required_unlabeled
+      if (_deliveredJars < _totalRequired) {
+        return "With 'Allow Remaining Stock', delivered jars ($_deliveredJars) must be ≥ total required ($_totalRequired)";
+      }
+    } else {
+      // delivered_jars must EXACTLY equal required_labeled + required_unlabeled
+      if (_deliveredJars != _totalRequired) {
+        return "Delivered jars ($_deliveredJars) must exactly equal labeled + unlabeled ($_totalRequired). Enable 'Allow Remaining Stock' for surplus.";
+      }
     }
 
-    if (remaining == 0 && keepAtPlant) {
-      return "Uncheck 'Keep at Plant' - all jars are allocated";
-    }
-
-    return null; // ✅ ALL VALID
+    return null; // ✅ valid
   }
 
-  /// 📦 BUILD LABEL BREAKDOWN
-  List<Map<String, dynamic>> buildLabelBreakdown() {
-    List<Map<String, dynamic>> list = [];
-
-    if (isVariantEnabled) {
-      for (var v in selectedVariants) {
-        int qty = int.tryParse(variantControllers[v.id]?.text ?? "0") ?? 0;
-        if (qty > 0) {
-          list.add({"raw_material_variant_id": v.id, "quantity": qty});
-        }
+  /// ✅ BUILD jars_with_label map → {"variantId": qty}
+  Map<String, dynamic> _buildJarsWithLabel() {
+    final Map<String, dynamic> map = {};
+    for (var v in selectedVariants) {
+      int qty = int.tryParse(variantControllers[v.id]?.text ?? "0") ?? 0;
+      if (qty > 0) {
+        map[v.id.toString()] = qty;
       }
     }
-
-    return list;
+    return map;
   }
 
+  // ✅ LIFECYCLE
   @override
   void initState() {
     super.initState();
     fetchPlants();
-
-    /// 👂 LISTEN TO QUANTITY CHANGES
-    filledJarsController.addListener(_updateKeepAtPlantState);
-    unlabeledJarsController.addListener(_updateKeepAtPlantState);
+    fetchVariants();
   }
 
-  /// ✅ AUTO-UPDATE KEEP AT PLANT STATE
-  void _updateKeepAtPlantState() {
-    setState(() {
-      _remainingQuantity = _calculateRemaining();
-
-      // Auto-set based on remaining quantity
-      if (_shouldKeepAtPlant()) {
-        keepAtPlant = true;
-      } else {
-        keepAtPlant = false;
-      }
-    });
+  @override
+  void dispose() {
+    deliveredJarsController.dispose();
+    usedPreviousStockController.dispose();
+    requiredLabeledController.dispose();
+    requiredUnlabeledController.dispose();
+    for (var c in variantControllers.values) {
+      c.dispose();
+    }
+    super.dispose();
   }
 
+  // ✅ API CALLS
   /// 🌱 FETCH PLANTS
   Future<void> fetchPlants() async {
     try {
@@ -183,7 +163,7 @@ class _OrderRequestScreenState extends State<OrderRequestScreen> {
 
   /// 🧪 FETCH VARIANTS
   Future<void> fetchVariants() async {
-    setState(() => isLoadingVariants = true);
+    // setState(() => isLoadingVariants = true);
 
     try {
       final data = await RequestService().getVariants();
@@ -199,46 +179,37 @@ class _OrderRequestScreenState extends State<OrderRequestScreen> {
 
   /// 🚀 SUBMIT ORDER
   Future<void> _submitOrder() async {
-    // Validate form
-    String? validationError = _validateForm();
-    if (validationError != null) {
-      _showError(validationError);
+    final error = _validateForm();
+    if (error != null) {
+      _showError(error);
       return;
     }
 
     setState(() => isSubmitting = true);
 
     try {
-      int filled = int.tryParse(filledJarsController.text) ?? 0;
-      int unlabeled = int.tryParse(unlabeledJarsController.text) ?? 0;
-
-      final service = RequestService();
-      await service.submitOrder(
+      await RequestService().submitOrder(
         plantId: selectedPlant!.id,
-        requiredQuantity: filled,
-        labelBreakdown: buildLabelBreakdown(),
-        unlabelCount: unlabeled,
-        keepAtPlant: keepAtPlant,
+        deliveredJars: _deliveredJars,
+        // usedPreviousStock: usePreviousStock
+        //     ? (int.tryParse(usedPreviousStockController.text) ?? 0)
+        //     : null,
+        requiredLabeledJars: _requiredLabeled,
+        requiredUnlabeledJars: _requiredUnlabeled,
+        jarsWithLabel: _buildJarsWithLabel(),
+        allowRemainingStock: allowRemainingStock,
       );
 
       if (mounted) {
         _showSuccess("Order submitted successfully!");
-
-        // Reset form after 2 seconds
         Future.delayed(const Duration(seconds: 2), () {
-          if (mounted) {
-            Navigator.pop(context);
-          }
+          if (mounted) Navigator.pop(context);
         });
       }
     } catch (e) {
-      if (mounted) {
-        _showError(e.toString());
-      }
+      if (mounted) _showError(e.toString());
     } finally {
-      if (mounted) {
-        setState(() => isSubmitting = false);
-      }
+      if (mounted) setState(() => isSubmitting = false);
     }
   }
 
@@ -265,24 +236,9 @@ class _OrderRequestScreenState extends State<OrderRequestScreen> {
   }
 
   @override
-  void dispose() {
-    filledJarsController.removeListener(_updateKeepAtPlantState);
-    unlabeledJarsController.removeListener(_updateKeepAtPlantState);
-    filledJarsController.dispose();
-    unlabeledJarsController.dispose();
-
-    for (var controller in variantControllers.values) {
-      controller.dispose();
-    }
-
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
-
       appBar: AppBar(
         backgroundColor: AppColors.primary,
         elevation: 0,
@@ -299,142 +255,119 @@ class _OrderRequestScreenState extends State<OrderRequestScreen> {
           ),
         ),
       ),
-
       body: LayoutBuilder(
         builder: (context, constraints) {
-          final double width = constraints.maxWidth;
-          final bool isMobile = width < 600;
-          final bool isTablet = width < 1024;
-          final double containerWidth = isMobile
-              ? double.infinity
-              : (isTablet ? 500 : 420);
-          final double padding = isMobile ? 16 : 24;
+          final isMobile = constraints.maxWidth < 600;
+          final padding = isMobile ? 16.0 : 24.0;
 
-          return SizedBox(
-            width: containerWidth,
-            child: SingleChildScrollView(
-              padding: EdgeInsets.zero,
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(padding, 10, padding, 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    /// 🌱 PLANT
-                    _sectionLabel("PLANT SECTION"),
-                    const SizedBox(height: 4),
-                    isLoadingPlants
-                        ? const Center(child: CircularProgressIndicator())
-                        : _plantDropdown(),
-                    const SizedBox(height: 14),
-
-                    /// 🔢 REQUIRED JARS
-                    _sectionLabel("REQUIRED FILLED JARS"),
-                    const SizedBox(height: 4),
-                    _numberInputBox(
-                      controller: filledJarsController,
-                      icon: Icons.inventory_2_outlined,
-                      hint: "Enter quantity",
-                    ),
-                    const SizedBox(height: 14),
-
-                    /// 🔁 TOGGLE
-                    _rawMaterialToggle(),
-                    const SizedBox(height: 14),
-
-                    /// 🧪 VARIANTS
-                    if (isVariantEnabled) ...[
-                      _variantsCard(),
-                      const SizedBox(height: 14),
-                    ],
-
-                    /// 🔢 UNLABELEDOUNT"),
-                    _sectionLabel("UNLABELED JARS COUNT"),
-                    const SizedBox(height: 4),
-                    _numberInputBox(
-                      controller: unlabeledJarsController,
-                      icon: Icons.label_off_outlined,
-                      hint: "Enter count",
-                    ),
-                    const SizedBox(height: 14),
-
-                    /// 📊 REMAINING QUANTITY DISPLAY
-                    if (_remainingQuantity > 0) ...[
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.shade50,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.orange.shade200),
+          return SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(padding, 10, padding, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── 1. PLANT ──────────────────────────────────
+                _sectionLabel("PLANT SECTION"),
+                const SizedBox(height: 4),
+                isLoadingPlants
+                    ? const Center(
+                        child: CircularProgressIndicator(
+                          color: AppColors.primary,
                         ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.info_outline,
-                              color: Colors.orange.shade700,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                "Remaining: $_remainingQuantity jars (Keep at Plant enabled)",
-                                style: TextStyle(
-                                  color: Colors.orange.shade700,
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                    ],
+                      )
+                    : _plantDropdown(),
+                const SizedBox(height: 14),
 
-                    /// ── KEEP AT PLANT ──
-                    _keepAtPlantCard(),
-                    const SizedBox(height: 24),
-
-                    /// 🚀 BUTTON
-                    SizedBox(
-                      width: double.infinity,
-                      height: 52,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: isSubmitting
-                              ? AppColors.primary.withValues(alpha: 0.6)
-                              : AppColors.primary,
-                          elevation: isSubmitting ? 0 : 2,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        onPressed: isSubmitting ? null : _submitOrder,
-
-                        child: isSubmitting
-                            ? const SizedBox(
-                                height: 24,
-                                width: 24,
-                                child: CircularProgressIndicator(
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    Colors.white,
-                                  ),
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Text(
-                                "SUBMIT",
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 14,
-                                  letterSpacing: 1,
-                                ),
-                              ),
-                      ),
-                    ),
-                  ],
+                // ── 2. DELIVERED JARS ─────────────────────────
+                _sectionLabel("DELIVERED JARS"),
+                const SizedBox(height: 4),
+                _inputBox(
+                  controller: deliveredJarsController,
+                  icon: Icons.local_shipping_outlined,
+                  hint: "Enter delivered jars count",
+                  onChanged: (_) => setState(() {}),
                 ),
-              ),
+                const SizedBox(height: 14),
+
+                // ── 3. USE PREVIOUS STOCK (checkbox) ──────────
+                _usePreviousStockCard(),
+                const SizedBox(height: 14),
+
+                // ── 4. REQUIRED LABELED JARS ──────────────────
+                _sectionLabel("REQUIRED LABELED JARS"),
+                const SizedBox(height: 4),
+                _inputBox(
+                  controller: requiredLabeledController,
+                  icon: Icons.inventory_2_outlined,
+                  hint: "Enter required labeled jars",
+                  onChanged: (_) => setState(() {}),
+                ),
+                const SizedBox(height: 14),
+
+                // ── 5. VARIANTS (always visible) ──────────────
+                _sectionLabel("VARIANTS & QUANTITIES"),
+                const SizedBox(height: 4),
+                _variantsCard(),
+                const SizedBox(height: 4),
+
+                // ✅ Live match indicator
+                if (selectedVariants.isNotEmpty) _variantMatchIndicator(),
+                const SizedBox(height: 14),
+
+                // ── 6. REQUIRED UNLABELED JARS ────────────────
+                _sectionLabel("REQUIRED UNLABELED JARS"),
+                const SizedBox(height: 4),
+                _inputBox(
+                  controller: requiredUnlabeledController,
+                  icon: Icons.label_off_outlined,
+                  hint: "Enter required unlabeled jars",
+                  onChanged: (_) => setState(() {}),
+                ),
+                const SizedBox(height: 14),
+
+                // ── 7. ALLOW REMAINING STOCK ──────────────────
+                _allowRemainingStockCard(),
+                const SizedBox(height: 14),
+
+                // ✅ Delivery summary banner
+                _deliverySummary(),
+                const SizedBox(height: 24),
+
+                // ── 8. SUBMIT ─────────────────────────────────
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isSubmitting
+                          ? AppColors.primary.withValues(alpha: 0.6)
+                          : AppColors.primary,
+                      elevation: isSubmitting ? 0 : 2,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    onPressed: isSubmitting ? null : _submitOrder,
+                    child: isSubmitting
+                        ? const SizedBox(
+                            height: 24,
+                            width: 24,
+                            child: CircularProgressIndicator(
+                              valueColor: AlwaysStoppedAnimation(Colors.white),
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Text(
+                            "SUBMIT ORDER",
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                  ),
+                ),
+              ],
             ),
           );
         },
@@ -442,11 +375,435 @@ class _OrderRequestScreenState extends State<OrderRequestScreen> {
     );
   }
 
-  /// ✅ DROPDOWN FOR PLANTS
+  // ✅ WIDGETS
+  /// ✅ Use Previous Stock checkbox + input
+  Widget _usePreviousStockCard() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: _cardDecoration(),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Checkbox(
+                value: usePreviousStock,
+                activeColor: AppColors.primary,
+                onChanged: (val) {
+                  setState(() {
+                    usePreviousStock = val!;
+                    if (!val) usedPreviousStockController.clear();
+                  });
+                },
+              ),
+              const SizedBox(width: 8),
+              const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Use Previous Stock",
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    "INCLUDE PREVIOUS STOCK IN ORDER",
+                    style: TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
+                ],
+              ),
+            ],
+          ),
+
+          // ✅ Show input only when checkbox is ON
+          if (usePreviousStock) ...[
+            const SizedBox(height: 10),
+            _inputBox(
+              controller: usedPreviousStockController,
+              icon: Icons.inventory_outlined,
+              hint: "Enter previous stock count",
+              onChanged: (_) => setState(() {}),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// ✅ Allow Remaining Stock checkbox (replaces Keep at Plant)
+  Widget _allowRemainingStockCard() {
+    final int surplus = _deliveredJars - _totalRequired;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: _cardDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Checkbox(
+                value: allowRemainingStock,
+                activeColor: AppColors.primary,
+                onChanged: (val) => setState(() => allowRemainingStock = val!),
+              ),
+              const SizedBox(width: 8),
+              const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Allow Remaining Stock",
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    "SURPLUS JARS STAY AT PLANT",
+                    style: TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
+                ],
+              ),
+            ],
+          ),
+
+          // ✅ Show surplus info when enabled
+          if (allowRemainingStock && surplus > 0) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    color: Colors.orange.shade700,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    "$surplus jars will remain at plant",
+                    style: TextStyle(
+                      color: Colors.orange.shade700,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// ✅ Variant match indicator
+  Widget _variantMatchIndicator() {
+    final int variantTotal = _totalVariantQty();
+    final bool isMatch =
+        variantTotal == _requiredLabeled && _requiredLabeled > 0;
+    final bool isOver = variantTotal > _requiredLabeled;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: isMatch
+            ? Colors.green.shade50
+            : isOver
+            ? Colors.red.shade50
+            : Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isMatch
+              ? Colors.green.shade300
+              : isOver
+              ? Colors.red.shade300
+              : Colors.blue.shade200,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isMatch
+                ? Icons.check_circle
+                : isOver
+                ? Icons.error
+                : Icons.info_outline,
+            size: 16,
+            color: isMatch
+                ? Colors.green.shade700
+                : isOver
+                ? Colors.red.shade700
+                : Colors.blue.shade700,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            isMatch
+                ? "✅ Variant total matches required labeled jars ($variantTotal)"
+                : isOver
+                ? "❌ Variant total ($variantTotal) exceeds required labeled ($_requiredLabeled)"
+                : "Variant total: $variantTotal / $_requiredLabeled required",
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: isMatch
+                  ? Colors.green.shade700
+                  : isOver
+                  ? Colors.red.shade700
+                  : Colors.blue.shade700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// ✅ Delivery summary banner
+  Widget _deliverySummary() {
+    if (_deliveredJars == 0 && _totalRequired == 0) return const SizedBox();
+
+    final bool isExact = _deliveredJars == _totalRequired;
+    final bool isSurplus = _deliveredJars > _totalRequired;
+    final bool isShort = _deliveredJars < _totalRequired;
+
+    Color color = isExact
+        ? Colors.green
+        : isSurplus
+        ? Colors.orange
+        : Colors.red;
+
+    String message = isExact
+        ? "✅ Delivered jars exactly match total required ($_totalRequired)"
+        : isSurplus
+        ? "⚠️ ${_deliveredJars - _totalRequired} surplus jars — enable 'Allow Remaining Stock'"
+        : "❌ Short by ${_totalRequired - _deliveredJars} jars";
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.summarize_outlined, color: color, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  message,
+                  style: TextStyle(
+                    color: color,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  "Labeled: $_requiredLabeled  |  Unlabeled: $_requiredUnlabeled  |  Total: $_totalRequired",
+                  style: TextStyle(
+                    color: color.withValues(alpha: 0.8),
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// ✅ Variants card — always visible, no toggle
+  Widget _variantsCard() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: _cardDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (isLoadingVariants)
+            const Center(
+              child: CircularProgressIndicator(color: AppColors.primary),
+            )
+          else
+            DropdownButtonHideUnderline(
+              child: DropdownButton2<VariantData>(
+                isExpanded: true,
+                // ✅ Always show count/hint — never bind a real value
+                customButton: Container(
+                  height: 48,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        selectedVariants.isEmpty
+                            ? "Select Variants"
+                            : "${selectedVariants.length} variant(s) selected",
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: selectedVariants.isEmpty
+                              ? Colors.grey
+                              : Colors.black,
+                        ),
+                      ),
+                      const Icon(
+                        Icons.keyboard_arrow_down,
+                        color: AppColors.primary,
+                      ),
+                    ],
+                  ),
+                ),
+                items: variants.map((variant) {
+                  // ✅ FIX 1: enabled: true so taps register
+                  return DropdownMenuItem<VariantData>(
+                    value: variant,
+                    enabled: true, // ✅ was false — that was blocking taps
+                    child: StatefulBuilder(
+                      builder: (context, menuSetState) {
+                        final isSelected = selectedVariants.any(
+                          (v) => v.id == variant.id,
+                        );
+
+                        void toggle() {
+                          final already = selectedVariants.any(
+                            (v) => v.id == variant.id,
+                          );
+                          if (already) {
+                            selectedVariants.removeWhere(
+                              (v) => v.id == variant.id,
+                            );
+                            variantControllers.remove(variant.id);
+                          } else {
+                            selectedVariants.add(variant);
+                            variantControllers[variant.id] =
+                                TextEditingController();
+                          }
+                          menuSetState(() {});
+                          setState(() {});
+                        }
+
+                        // ✅ FIX 2: GestureDetector instead of InkWell
+                        return GestureDetector(
+                          behavior:
+                              HitTestBehavior.opaque, // ✅ catches all taps
+                          onTap: toggle,
+                          child: Row(
+                            children: [
+                              Checkbox(
+                                value: isSelected,
+                                activeColor: AppColors.primary,
+                                onChanged: (_) => toggle(),
+                              ),
+                              Expanded(
+                                child: Text(
+                                  variant.variantName,
+                                  style: const TextStyle(fontSize: 14),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  );
+                }).toList(),
+
+                // ✅ FIX 3: onChanged must NOT close or reset — just ignore
+                onChanged: (val) {
+                  // intentionally empty — selection handled inside item
+                },
+
+                value: null, // ✅ always null for multi-select
+                dropdownStyleData: DropdownStyleData(
+                  maxHeight: 300,
+                  elevation: 2,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+
+          // Selected variants qty inputs — unchanged
+          if (selectedVariants.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            ...selectedVariants.map((v) {
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        v.variantName,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 100,
+                      child: TextField(
+                        controller: variantControllers[v.id],
+                        keyboardType: TextInputType.number,
+                        cursorColor: AppColors.primary,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
+                        onChanged: (_) => setState(() {}),
+                        decoration: InputDecoration(
+                          hintText: "Qty",
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 6,
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(
+                              color: AppColors.primary.withValues(alpha: 0.4),
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(
+                              color: AppColors.primary,
+                              width: 1.5,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _plantDropdown() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14),
-      // decoration: _cardDecoration(),
       decoration: _cardDecoration().copyWith(
         borderRadius: BorderRadius.circular(30),
       ),
@@ -474,24 +831,15 @@ class _OrderRequestScreenState extends State<OrderRequestScreen> {
               ),
             );
           }).toList(),
-          onChanged: (value) {
-            setState(() {
-              selectedPlant = value;
-            });
-          },
-
-          /// ✅ FIXED NEW STYLE
+          onChanged: (val) => setState(() => selectedPlant = val),
           buttonStyleData: const ButtonStyleData(height: 48),
           menuItemStyleData: const MenuItemStyleData(height: 48),
           dropdownStyleData: DropdownStyleData(
             maxHeight: 250,
-
-            /// ✅ WHITE BACKGROUND
             decoration: BoxDecoration(
-              color: Colors.white, // 👈 important
-              borderRadius: BorderRadius.circular(16), // 👈 curve dropdown
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
             ),
-
             elevation: 4,
           ),
           iconStyleData: const IconStyleData(
@@ -514,11 +862,11 @@ class _OrderRequestScreenState extends State<OrderRequestScreen> {
     );
   }
 
-  /// 🔢 INPUT
-  Widget _numberInputBox({
+  Widget _inputBox({
     required TextEditingController controller,
     required IconData icon,
     required String hint,
+    ValueChanged<String>? onChanged,
   }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -527,318 +875,18 @@ class _OrderRequestScreenState extends State<OrderRequestScreen> {
         children: [
           Icon(icon, color: AppColors.primary),
           const SizedBox(width: 12),
-
           Expanded(
             child: TextField(
               controller: controller,
               cursorColor: AppColors.primary,
               keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              onChanged: onChanged,
               decoration: InputDecoration(
                 hintText: hint,
                 border: InputBorder.none,
               ),
-
-              /// ✅ ONLY NUMBERS
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 🔁 TOGGLE
-  Widget _rawMaterialToggle() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: _cardDecoration(),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.green.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(Icons.science, color: AppColors.primary, size: 20),
-              ),
-              const SizedBox(width: 12),
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "Raw Material Variant",
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                  ),
-                  SizedBox(height: 2),
-                  Text(
-                    "ADDITIONAL CONFIGURATION",
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.grey,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          Switch(
-            activeThumbColor: AppColors.primary,
-            activeTrackColor: AppColors.primary.withValues(
-              alpha: 0.4,
-            ), // ✅ track color
-            value: isVariantEnabled,
-            onChanged: (val) async {
-              setState(() => isVariantEnabled = val);
-
-              if (val) {
-                await fetchVariants();
-              } else {
-                selectedVariants.clear();
-                variantControllers.clear();
-                _updateKeepAtPlantState();
-              }
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 🧪 VARIANT UI
-  Widget _variantsCard() {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: _cardDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text("SELECT VARIANTS & QUANTITY"),
-          const SizedBox(height: 10),
-
-          /// 🔄 LOADING
-          if (isLoadingVariants)
-            const Center(child: CircularProgressIndicator()),
-
-          /// ✅ DROPDOWN
-          if (!isLoadingVariants)
-            DropdownButtonHideUnderline(
-              child: DropdownButton2<VariantData>(
-                isExpanded: true,
-                hint: const Text("Select Variants"),
-
-                items: variants.map((variant) {
-                  return DropdownMenuItem<VariantData>(
-                    value: variant,
-                    enabled: false,
-
-                    /// 🔥 FIXED STATE
-                    child: StatefulBuilder(
-                      builder: (context, menuSetState) {
-                        bool isSelected = selectedVariants.any(
-                          (v) => v.id == variant.id,
-                        );
-
-                        void toggleSelection() {
-                          final alreadySelected = selectedVariants.any(
-                            (v) => v.id == variant.id,
-                          );
-
-                          if (alreadySelected) {
-                            selectedVariants.removeWhere(
-                              (v) => v.id == variant.id,
-                            );
-                            variantControllers.remove(variant.id);
-                          } else {
-                            selectedVariants.add(variant);
-                            variantControllers[variant.id] =
-                                TextEditingController();
-                          }
-
-                          /// ⚡ FAST UI UPDATE
-                          menuSetState(() {});
-                          // setState(() {});
-                          setState(() => _updateKeepAtPlantState());
-                        }
-
-                        return InkWell(
-                          onTap: toggleSelection,
-                          child: Row(
-                            children: [
-                              Checkbox(
-                                value: isSelected,
-                                activeColor: AppColors.primary,
-                                onChanged: (_) => toggleSelection(),
-                              ),
-                              Expanded(
-                                child: Text(
-                                  variant.variantName,
-                                  style: const TextStyle(fontSize: 14),
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                  );
-                }).toList(),
-
-                onChanged: (_) {},
-
-                /// ✅ SHOW COUNT
-                value: selectedVariants.isEmpty ? null : selectedVariants.first,
-
-                selectedItemBuilder: (context) {
-                  return variants.map((variant) {
-                    return Text(
-                      selectedVariants.isEmpty
-                          ? "Select Variants"
-                          : "${selectedVariants.length} selected",
-                      style: const TextStyle(fontSize: 14),
-                    );
-                  }).toList();
-                },
-
-                /// 🎨 STYLE
-                buttonStyleData: const ButtonStyleData(height: 48),
-                dropdownStyleData: DropdownStyleData(
-                  maxHeight: 300,
-                  elevation: 2,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                iconStyleData: const IconStyleData(
-                  icon: Icon(
-                    Icons.keyboard_arrow_down,
-                    color: AppColors.primary,
-                  ),
-                ),
-              ),
-            ),
-
-          const SizedBox(height: 10),
-
-          /// ✅ SELECTED VARIANTS LIST
-          ...selectedVariants.map((v) {
-            return Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade50,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.grey.shade200),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  /// NAME
-                  Expanded(
-                    child: Text(
-                      v.variantName,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
-
-                  /// INPUT
-                  Row(
-                    children: [
-                      SizedBox(
-                        width: 100,
-                        child: TextField(
-                          controller: variantControllers[v.id],
-                          keyboardType: TextInputType.number,
-                          cursorColor: AppColors.primary,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                          ],
-                          onChanged: (_) =>
-                              setState(() => _updateKeepAtPlantState()),
-                          decoration: InputDecoration(
-                            hintText: "Qty",
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 6,
-                            ),
-
-                            /// ✅ DEFAULT BORDER
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(
-                                color: AppColors.primary.withValues(alpha: 0.4),
-                              ),
-                            ),
-
-                            /// ✅ FOCUSED BORDER
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(
-                                color: AppColors.primary,
-                                width: 1.5,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(width: 6),
-                    ],
-                  ),
-                ],
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-
-  Widget _keepAtPlantCard() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: _cardDecoration(),
-      child: Row(
-        children: [
-          Checkbox(
-            value: keepAtPlant,
-            activeColor: AppColors.primary,
-            // onChanged: (val) => setState(() => keepAtPlant = val!),
-            onChanged: (val) {
-              setState(() {
-                // Only allow manual change if it matches the calculated state
-                if (val == _shouldKeepAtPlant()) {
-                  keepAtPlant = val!;
-                } else {
-                  _showError(
-                    "Keep at Plant must be ${_shouldKeepAtPlant() ? 'enabled' : 'disabled'} based on quantities",
-                  );
-                }
-              });
-            },
-          ),
-          const SizedBox(width: 8),
-          const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                "Keep at Plant",
-                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-              ),
-              SizedBox(height: 2),
-              Text(
-                "IMMEDIATE STORAGE PROTOCOLS",
-                style: TextStyle(fontSize: 11, color: Colors.grey),
-              ),
-            ],
           ),
         ],
       ),

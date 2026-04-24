@@ -12,5 +12,5 @@ class ApiEndpoints {
       "/distributor/orders?step=requested&status=pending";
   static const String approvedOrder = "/";
 
-  static const String orderList = "/distributor/orders";
+  static const String ordersList = "/distributor/orders";
 }

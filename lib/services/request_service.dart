@@ -1,6 +1,7 @@
 import 'package:distributor/api/api_service.dart';
 import 'package:distributor/models/order_list_model.dart';
 import 'package:distributor/models/order_summary_model.dart';
+import 'package:distributor/models/orders_list_model.dart';
 import 'package:distributor/models/plant_model.dart';
 import 'package:distributor/models/varient_model.dart';
 import 'package:distributor/utils/app_logger.dart';
@@ -114,24 +115,28 @@ class RequestService {
   /// 🚀 SUBMIT ORDER
   Future<dynamic> submitOrder({
     required int plantId,
-    required int requiredQuantity,
-    required List<Map<String, dynamic>> labelBreakdown,
-    required int unlabelCount,
-    required bool keepAtPlant,
+    required int deliveredJars,
+    // int? usedPreviousStock, // ✅ optional
+
+    required int requiredLabeledJars,
+    required int requiredUnlabeledJars,
+    required Map<String, dynamic> jarsWithLabel, // ✅ {"variantId": qty}
+    required bool allowRemainingStock,
   }) async {
     AppLogger.i("🚀 SUBMIT ORDER START");
 
     try {
       /// ✅ ALWAYS SEND LIST (NEVER NULL)
-      final List<Map<String, dynamic>> safeLabelBreakdown =
-          labelBreakdown.isNotEmpty ? labelBreakdown : [];
 
-      final body = {
+      final body = <String, dynamic>{
         "plant_id": plantId,
-        "required_quantity": requiredQuantity,
-        "label_breakdown": safeLabelBreakdown,
-        "unlabel_count": unlabelCount,
-        "keep_at_plant": keepAtPlant,
+        "delivered_jars": deliveredJars,
+        // if (usedPreviousStock != null)
+        //   "used_previous_stock": usedPreviousStock, // ✅ only if checkbox on
+        "required_labeled_jars": requiredLabeledJars,
+        "required_unlabeled_jars": requiredUnlabeledJars,
+        "jars_with_label": jarsWithLabel, // ✅ {"10": 20}
+        "allow_remaining_stock": allowRemainingStock,
       };
 
       AppLogger.d("📦 REQUEST BODY: $body");
@@ -182,6 +187,55 @@ class RequestService {
       }
     } catch (e) {
       AppLogger.e("❌ PENDING ORDER FETCH ERROR: $e");
+
+      String message = e.toString();
+
+      if (message.contains("SocketException")) {
+        message = "No internet connection";
+      }
+
+      throw message.replaceAll("Exception: ", "");
+    }
+  }
+
+  /// 📦 GET ORDERS LIST (WITH FILTER + PAGINATION)
+  Future<OrderData> getOrders({String? status, int page = 1}) async {
+    AppLogger.i("📦 FETCH ORDERS START");
+
+    try {
+      final queryParams = <String, String>{
+        // "page": page.toString(),
+        // if (status != null && status.isNotEmpty) "status": status.toLowerCase(),
+        if (status != null && status.isNotEmpty) "status": status.toLowerCase(),
+        "page": page.toString(),
+      };
+
+      AppLogger.d("🔗 Endpoint: ${ApiEndpoints.ordersList}");
+      AppLogger.d("QueryParams: $queryParams");
+
+      final response = await _api.request(
+        endpoint: ApiEndpoints.ordersList,
+        method: "GET",
+        isAuthRequired: true,
+        queryParams: queryParams,
+      );
+
+      // ✅ Null-safety check before parsing
+      if (response == null) {
+        throw Exception("Empty response from server");
+      }
+
+      final model = OrdersListModel.fromJson(response);
+
+      AppLogger.d("Orders Count: ${model.data.orders.length}");
+      AppLogger.d("Current Page: ${model.data.currentPage}");
+      AppLogger.d("Last Page: ${model.data.lastPage}");
+      AppLogger.d("✅ Status Filter: ${status ?? 'ALL'}");
+      AppLogger.i("✅ Orders fetched successfully");
+
+      return model.data;
+    } catch (e) {
+      AppLogger.e("❌ ORDERS FETCH ERROR: $e");
 
       String message = e.toString();
 

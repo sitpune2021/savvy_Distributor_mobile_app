@@ -20,13 +20,26 @@ class ApiService {
     String method = "GET",
     Map<String, dynamic>? body,
     bool isAuthRequired = false,
+    Map<String, dynamic>? queryParams,
   }) async {
     AppLogger.i("🚀 API CALL START");
     AppLogger.d("Endpoint: $endpoint");
     AppLogger.d("Method: $method");
 
-    final url = Uri.parse(AppConstants.baseUrl + endpoint);
-    AppLogger.d("URL: $url");
+    // final url = Uri.parse(AppConstants.baseUrl + endpoint);
+    // AppLogger.d("URL: $url");
+
+    // ✅ Build URL with queryParams for GET requests
+    final Uri url;
+    if (method == "GET" && queryParams != null && queryParams.isNotEmpty) {
+      url = Uri.parse(
+        AppConstants.baseUrl + endpoint,
+      ).replace(queryParameters: queryParams);
+    } else {
+      url = Uri.parse(AppConstants.baseUrl + endpoint);
+    }
+
+    AppLogger.d("URL: $url"); // Now logs: /orders?status=approved&page=1
 
     try {
       String? token;

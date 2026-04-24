@@ -1,7 +1,7 @@
 import 'package:distributor/screens/home_screen.dart';
 import 'package:distributor/screens/order_list_screen.dart';
 import 'package:distributor/screens/order_request_screen.dart';
-import 'package:distributor/screens/order_screen.dart';
+import 'package:distributor/screens/orders_screen.dart';
 import 'package:distributor/screens/splash_screen.dart';
 import 'package:flutter/material.dart';
 import '../screens/login_screen.dart';
