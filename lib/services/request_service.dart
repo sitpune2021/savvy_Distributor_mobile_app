@@ -116,8 +116,6 @@ class RequestService {
   Future<dynamic> submitOrder({
     required int plantId,
     required int deliveredJars,
-    // int? usedPreviousStock, // ✅ optional
-
     required int requiredLabeledJars,
     required int requiredUnlabeledJars,
     required Map<String, dynamic> jarsWithLabel, // ✅ {"variantId": qty}
@@ -131,8 +129,6 @@ class RequestService {
       final body = <String, dynamic>{
         "plant_id": plantId,
         "delivered_jars": deliveredJars,
-        // if (usedPreviousStock != null)
-        //   "used_previous_stock": usedPreviousStock, // ✅ only if checkbox on
         "required_labeled_jars": requiredLabeledJars,
         "required_unlabeled_jars": requiredUnlabeledJars,
         "jars_with_label": jarsWithLabel, // ✅ {"10": 20}

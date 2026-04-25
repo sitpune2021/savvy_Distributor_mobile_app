@@ -14,9 +14,8 @@ class OrderRequestScreen extends StatefulWidget {
 }
 
 class _OrderRequestScreenState extends State<OrderRequestScreen> {
-  bool isVariantEnabled = false;
-  bool usePreviousStock = false; // ✅ checkbox for used_previous_stock
-  bool allowRemainingStock = false; // ✅ replaces keepAtPlant
+  bool usePreviousStock = false;
+  bool allowRemainingStock = false;
   bool isSubmitting = false;
 
   // ✅ Controllers
@@ -39,24 +38,36 @@ class _OrderRequestScreenState extends State<OrderRequestScreen> {
   Map<int, TextEditingController> variantControllers = {};
   bool isLoadingVariants = true;
 
-  // ✅ HELPER METHODS
+  /// ✅ CALCULATIONS
+  /// ✅ HELPER METHODS
   /// Sum of all selected variant quantities
+  int get _deliveredJars => int.tryParse(deliveredJarsController.text) ?? 0; //1
+  int get _usedPreviousStock =>
+      int.tryParse(usedPreviousStockController.text) ?? 0; //2
+  int get _requiredLabeled =>
+      int.tryParse(requiredLabeledController.text) ?? 0; //3
+  int get _requiredUnlabeled =>
+      int.tryParse(requiredUnlabeledController.text) ?? 0; //4
+
+  int get _totalRequired => _requiredLabeled + _requiredUnlabeled; //5
+
+  int get _finalDeliveredJars => usePreviousStock
+      ? (_deliveredJars - _usedPreviousStock)
+      : _deliveredJars; //6
+
+  int get _remainingAfterUsage {
+    //7
+    final max = selectedPlant?.remainingEmptyJars ?? 0;
+    return max - _usedPreviousStock;
+  }
+
   int _totalVariantQty() {
     int total = 0;
     for (var v in selectedVariants) {
-      total += int.tryParse(variantControllers[v.id]?.text ?? "0") ?? 0;
+      total += int.tryParse(variantControllers[v.id]?.text ?? "0") ?? 0; //8
     }
     return total;
   }
-
-  int get _requiredLabeled => int.tryParse(requiredLabeledController.text) ?? 0;
-
-  int get _requiredUnlabeled =>
-      int.tryParse(requiredUnlabeledController.text) ?? 0;
-
-  int get _deliveredJars => int.tryParse(deliveredJarsController.text) ?? 0;
-
-  int get _totalRequired => _requiredLabeled + _requiredUnlabeled;
 
   /// ✅ VALIDATION
   String? _validateForm() {
@@ -70,6 +81,9 @@ class _OrderRequestScreenState extends State<OrderRequestScreen> {
     if (usePreviousStock) {
       int prev = int.tryParse(usedPreviousStockController.text) ?? 0;
       if (prev == 0) return "Enter used previous stock count";
+      if (selectedPlant != null && prev > selectedPlant!.remainingEmptyJars) {
+        return "Previous stock cannot exceed ${selectedPlant!.remainingEmptyJars}";
+      }
     }
 
     // 4. Required labeled jars
@@ -106,6 +120,11 @@ class _OrderRequestScreenState extends State<OrderRequestScreen> {
       if (_deliveredJars != _totalRequired) {
         return "Delivered jars ($_deliveredJars) must exactly equal labeled + unlabeled ($_totalRequired). Enable 'Allow Remaining Stock' for surplus.";
       }
+    }
+
+    // 10. If using previous stock, final delivered jars cannot be negative
+    if (_finalDeliveredJars < 0) {
+      return "Used previous stock cannot exceed delivered jars";
     }
 
     return null; // ✅ valid
@@ -190,10 +209,8 @@ class _OrderRequestScreenState extends State<OrderRequestScreen> {
     try {
       await RequestService().submitOrder(
         plantId: selectedPlant!.id,
-        deliveredJars: _deliveredJars,
-        // usedPreviousStock: usePreviousStock
-        //     ? (int.tryParse(usedPreviousStockController.text) ?? 0)
-        //     : null,
+        // deliveredJars: _deliveredJars,
+        deliveredJars: _finalDeliveredJars, // ✅ adjusted value
         requiredLabeledJars: _requiredLabeled,
         requiredUnlabeledJars: _requiredUnlabeled,
         jarsWithLabel: _buildJarsWithLabel(),
@@ -275,6 +292,117 @@ class _OrderRequestScreenState extends State<OrderRequestScreen> {
                         ),
                       )
                     : _plantDropdown(),
+
+                const SizedBox(height: 4),
+                // ✅ NEW: Remaining stock display
+                if (selectedPlant != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    "Remaining Empty Jars: ${selectedPlant!.remainingEmptyJars}",
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.blue,
+                    ),
+                  ),
+                ],
+
+                // ✅ NEW: Use Previous Stock Checkbox
+                if (selectedPlant != null &&
+                    selectedPlant!.remainingEmptyJars > 0) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: usePreviousStock,
+                        activeColor: AppColors.primary,
+                        onChanged: (val) {
+                          setState(() {
+                            usePreviousStock = val!;
+
+                            if (!usePreviousStock) {
+                              // ✅ AUTO FILL MAX VALUE
+                              final max =
+                                  selectedPlant?.remainingEmptyJars ?? 0;
+                              usedPreviousStockController.text = max.toString();
+                              // usedPreviousStockController.clear();
+                            } else {
+                              usedPreviousStockController.clear();
+                            }
+                          });
+                        },
+                      ),
+                      const Text(
+                        "Use Previous Stock",
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                ],
+
+                // ✅ NEW: Input when checkbox enabled
+                if (usePreviousStock) ...[
+                  const SizedBox(height: 8),
+                  _inputBox(
+                    controller: usedPreviousStockController,
+                    icon: Icons.history,
+                    hint: "Enter used previous stock",
+                    onChanged: (val) {
+                      final max = selectedPlant?.remainingEmptyJars ?? 0;
+                      int input = int.tryParse(val) ?? 0;
+
+                      // ✅ HARD LIMIT (no typing above max)
+                      if (input > max) {
+                        input = max;
+                        usedPreviousStockController.text = max.toString();
+                        usedPreviousStockController.selection =
+                            TextSelection.fromPosition(
+                              TextPosition(offset: max.toString().length),
+                            );
+                      }
+
+                      setState(() {});
+                    },
+                  ),
+                  SizedBox(height: 6),
+                  if (usePreviousStock) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      "Remaining after usage: $_remainingAfterUsage",
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: _remainingAfterUsage >= 0
+                            ? Colors.green
+                            : Colors.red,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                  // _inputBox(
+                  //   controller: usedPreviousStockController,
+                  //   icon: Icons.history,
+                  //   hint: "Enter used previous stock",
+                  //   onChanged: (val) {
+                  //     final max = selectedPlant?.remainingEmptyJars ?? 0;
+                  //     final input = int.tryParse(val) ?? 0;
+
+                  //     // ✅ HARD LIMIT (no typing above max)
+                  //     if (input > max) {
+                  //       input = max;
+                  //       usedPreviousStockController.text = max.toString();
+                  //       usedPreviousStockController.selection =
+                  //           TextSelection.fromPosition(
+                  //             TextPosition(offset: max.toString().length),
+                  //           );
+
+                  //       _showError("Cannot exceed remaining stock ($max)");
+                  //     }
+
+                  //     setState(() {});
+                  //   },
+                  // ),
+                ],
+
                 const SizedBox(height: 14),
 
                 // ── 2. DELIVERED JARS ─────────────────────────
@@ -286,10 +414,6 @@ class _OrderRequestScreenState extends State<OrderRequestScreen> {
                   hint: "Enter delivered jars count",
                   onChanged: (_) => setState(() {}),
                 ),
-                const SizedBox(height: 14),
-
-                // ── 3. USE PREVIOUS STOCK (checkbox) ──────────
-                _usePreviousStockCard(),
                 const SizedBox(height: 14),
 
                 // ── 4. REQUIRED LABELED JARS ──────────────────
@@ -376,57 +500,6 @@ class _OrderRequestScreenState extends State<OrderRequestScreen> {
   }
 
   // ✅ WIDGETS
-  /// ✅ Use Previous Stock checkbox + input
-  Widget _usePreviousStockCard() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: _cardDecoration(),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Checkbox(
-                value: usePreviousStock,
-                activeColor: AppColors.primary,
-                onChanged: (val) {
-                  setState(() {
-                    usePreviousStock = val!;
-                    if (!val) usedPreviousStockController.clear();
-                  });
-                },
-              ),
-              const SizedBox(width: 8),
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "Use Previous Stock",
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                  ),
-                  SizedBox(height: 2),
-                  Text(
-                    "INCLUDE PREVIOUS STOCK IN ORDER",
-                    style: TextStyle(fontSize: 11, color: Colors.grey),
-                  ),
-                ],
-              ),
-            ],
-          ),
-
-          // ✅ Show input only when checkbox is ON
-          if (usePreviousStock) ...[
-            const SizedBox(height: 10),
-            _inputBox(
-              controller: usedPreviousStockController,
-              icon: Icons.inventory_outlined,
-              hint: "Enter previous stock count",
-              onChanged: (_) => setState(() {}),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
 
   /// ✅ Allow Remaining Stock checkbox (replaces Keep at Plant)
   Widget _allowRemainingStockCard() {
@@ -831,7 +904,16 @@ class _OrderRequestScreenState extends State<OrderRequestScreen> {
               ),
             );
           }).toList(),
-          onChanged: (val) => setState(() => selectedPlant = val),
+          onChanged: (val) {
+            setState(() {
+              selectedPlant = val;
+
+              // 🔥 Reset previous stock when plant changes
+              usePreviousStock = false;
+              usedPreviousStockController.clear();
+            });
+          },
+          // => setState(() => selectedPlant = val),
           buttonStyleData: const ButtonStyleData(height: 48),
           menuItemStyleData: const MenuItemStyleData(height: 48),
           dropdownStyleData: DropdownStyleData(

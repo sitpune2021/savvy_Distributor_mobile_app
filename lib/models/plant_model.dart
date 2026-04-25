@@ -40,12 +40,25 @@ class PlantModel {
 class Plant {
   final int id;
   final String name;
+  final int remainingEmptyJars;
 
-  Plant({required this.id, required this.name});
+  Plant({
+    required this.id,
+    required this.name,
+    required this.remainingEmptyJars,
+  });
 
   factory Plant.fromJson(Map<String, dynamic> json) {
-    return Plant(id: json["id"] ?? 0, name: json["name"] ?? "");
+    return Plant(
+      id: json["id"] ?? 0,
+      name: json["name"] ?? "",
+      remainingEmptyJars: json["remaining_empty_jars"] ?? 0,
+    );
   }
 
-  Map<String, dynamic> toJson() => {"id": id, "name": name};
+  Map<String, dynamic> toJson() => {
+    "id": id,
+    "name": name,
+    "remaining_empty_jars": remainingEmptyJars,
+  };
 }
